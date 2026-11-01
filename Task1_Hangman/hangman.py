@@ -1,10 +1,8 @@
 """
 Hangman Word Guessing Game (Console)
 ------------------------------------
-- Picks a random word from words.txt (the downloaded English word list),
-  falling back to a built-in list if the file is missing.
-- 6 incorrect guesses allowed, with ASCII gallows art for each stage.
-- Tracks guessed letters; repeated guesses never cost an attempt.
+Guess the hidden word one letter at a time.
+You get 6 wrong guesses before the game ends.
 """
 
 import random
@@ -12,10 +10,12 @@ import os
 
 MAX_MISTAKES = 6
 WORD_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "words.txt")
+
+# Words to use if words.txt is missing
 FALLBACK_WORDS = ["python", "keyboard", "internship", "algorithm", "variable",
                   "function", "database", "compiler", "software", "network"]
 
-# ASCII art: index = number of incorrect guesses (0..6)
+# Gallows drawing for each stage (0 = no mistakes, 6 = game over)
 STAGES = [
     """
      -----
@@ -77,7 +77,7 @@ STAGES = [
 
 
 def load_words(path=WORD_FILE, min_len=4):
-    """Load alphabetic words of at least min_len letters; fall back if needed."""
+    """Read words from the file, or use the fallback list if it's missing."""
     try:
         with open(path, encoding="utf-8") as f:
             words = [w.strip().lower() for w in f
@@ -90,12 +90,12 @@ def load_words(path=WORD_FILE, min_len=4):
 
 
 def masked_word(secret, guessed):
-    """Return e.g. '_ a _ h o n' based on correctly guessed letters."""
+    """Show the word with guessed letters filled in, like 'p _ t _ _ _'."""
     return " ".join(ch if ch in guessed else "_" for ch in secret)
 
 
 def get_guess(guessed):
-    """Prompt until the player enters a single new letter."""
+    """Ask the player for a letter until they give a valid new one."""
     while True:
         guess = input("Guess a letter: ").strip().lower()
         if len(guess) != 1 or not guess.isalpha():
@@ -107,11 +107,12 @@ def get_guess(guessed):
 
 
 def play_round(secret):
-    """Run one game. Returns True if the player wins."""
+    """Play one game. Returns True if the player wins, False if they lose."""
     guessed = set()
     mistakes = 0
 
     while mistakes < MAX_MISTAKES:
+        # Show the current game state
         print(STAGES[mistakes])
         print(f"\nWord:    {masked_word(secret, guessed)}")
         print(f"Guessed: {' '.join(sorted(guessed)) or '-'}")
@@ -122,13 +123,16 @@ def play_round(secret):
 
         if guess in secret:
             print(f"Good guess! '{guess}' is in the word.")
+            # Check if all letters are guessed
             if all(ch in guessed for ch in secret):
                 print(f"\n*** VICTORY! The word was '{secret}'. ***")
                 return True
         else:
+            # Wrong guess, count a mistake
             mistakes += 1
             print(f"Sorry, '{guess}' is not in the word.")
 
+    # Out of guesses, player loses
     print(STAGES[MAX_MISTAKES])
     print(f"\n*** DEFEAT! The word was '{secret}'. ***")
     return False
@@ -140,11 +144,14 @@ def main():
     wins = losses = 0
 
     while True:
+        # Play a round and update the score
         if play_round(random.choice(words)):
             wins += 1
         else:
             losses += 1
         print(f"Score - Wins: {wins} | Losses: {losses}")
+
+        # Ask if the player wants another round
         if input("\nPlay again? (y/n): ").strip().lower() != "y":
             print("Thanks for playing!")
             break
