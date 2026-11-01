@@ -1,36 +1,36 @@
 """
 Stock Portfolio Performance Tracker
 -----------------------------------
-- Enter ticker symbols, buy prices and share quantities.
-- Positions are stored in a dictionary: {ticker: {"buy_price", "shares"}}.
-- Current prices come from Yahoo Finance (yfinance) when available;
-  otherwise you are asked to type the current price manually.
-- Computes invested capital, current market value and % gain/loss per holding
-  and for the whole portfolio, prints a formatted table, and appends a
-  timestamped log to 'portfolio_summary.csv' (built-in csv module).
-- Optional: if 'sp500.csv' (S&P 500 Ticker Dataset) is in the same folder,
-  tickers are validated against it and company names are shown.
+Track how your stock holdings are doing.
+
+- Enter ticker symbols, buy prices and share quantities
+- Live prices come from Yahoo Finance (if installed), otherwise you type them
+- Shows invested amount, current value and gain/loss for each stock
+- Saves a log to portfolio_summary.csv every time you run it
 """
 
 import csv
 import os
 from datetime import datetime
 
+# Optional library for live prices
 try:
-    import yfinance as yf          # optional: pip install yfinance
+    import yfinance as yf
 except ImportError:
     yf = None
 
+# File paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_FILE = os.path.join(BASE_DIR, "sp500.csv")
 SUMMARY_FILE = os.path.join(BASE_DIR, "portfolio_summary.csv")
+
+# Columns for the CSV log
 FIELDS = ["Timestamp", "Symbol", "Company", "Shares", "Buy Price",
           "Current Price", "Invested", "Current Value", "Gain/Loss", "Gain/Loss %"]
 
 
-# ---------- Data loading ----------
 def load_sp500(path=DATASET_FILE):
-    """Return {symbol: company name} from the S&P 500 CSV (empty if missing)."""
+    """Read company names from sp500.csv (or return empty if file is missing)."""
     companies = {}
     try:
         with open(path, newline="", encoding="utf-8") as f:
@@ -42,7 +42,7 @@ def load_sp500(path=DATASET_FILE):
 
 
 def fetch_price(ticker):
-    """Try to get the latest price from Yahoo Finance; return None on failure."""
+    """Get the latest price from Yahoo Finance. Return None if it fails."""
     if yf is None:
         return None
     try:
@@ -54,9 +54,8 @@ def fetch_price(ticker):
     return None
 
 
-# ---------- Input helpers ----------
 def ask_float(prompt, minimum=0.0):
-    """Prompt until a number greater than `minimum` is entered."""
+    """Keep asking until the user types a number bigger than `minimum`."""
     while True:
         try:
             value = float(input(prompt).strip().replace(",", ""))
@@ -68,43 +67,55 @@ def ask_float(prompt, minimum=0.0):
 
 
 def collect_positions(companies):
-    """Interactively build the portfolio dictionary."""
+    """Ask the user for their stocks and build the portfolio dictionary."""
     portfolio = {}
     print("Enter your holdings (press Enter on the ticker to finish).\n")
+
     while True:
         ticker = input("Ticker symbol: ").strip().upper()
+
+        # Empty ticker means "done"
         if not ticker:
             if portfolio:
                 break
             print("Add at least one holding first.")
             continue
+
+        # Check ticker against the S&P 500 list (if we have one)
         if companies and ticker not in companies:
             print(f"'{ticker}' was not found in the S&P 500 dataset. Try again.")
             continue
+
         buy_price = ask_float("  Buy price per share ($): ")
         shares = ask_float("  Number of shares: ")
-        if ticker in portfolio:      # merge repeat buys using weighted average cost
+
+        # If we already have this stock, merge using average cost
+        if ticker in portfolio:
             old = portfolio[ticker]
             total = old["shares"] + shares
             old["buy_price"] = (old["buy_price"] * old["shares"] + buy_price * shares) / total
             old["shares"] = total
         else:
             portfolio[ticker] = {"buy_price": buy_price, "shares": shares}
+
         print(f"  Added {ticker}.\n")
+
     return portfolio
 
 
-# ---------- Calculations ----------
 def evaluate(portfolio, companies):
-    """Return a list of result rows (dicts), one per holding."""
+    """Calculate values for each stock and return the results as a list."""
     results = []
     for ticker, pos in portfolio.items():
+        # Try live price first; ask the user if it fails
         price = fetch_price(ticker)
         if price is None:
             print(f"Could not fetch live price for {ticker}.")
             price = ask_float(f"  Enter current price for {ticker} ($): ")
+
         invested = pos["buy_price"] * pos["shares"]
         value = price * pos["shares"]
+
         results.append({
             "Symbol": ticker,
             "Company": companies.get(ticker, "N/A"),
@@ -120,23 +131,26 @@ def evaluate(portfolio, companies):
 
 
 def totals(results):
+    """Add up the whole portfolio: invested, value, gain/loss, percent."""
     invested = sum(r["Invested"] for r in results)
     value = sum(r["Current Value"] for r in results)
     return invested, value, value - invested, (value - invested) / invested * 100
 
 
-# ---------- Output ----------
 def print_report(results):
+    """Print a neat table of every holding plus the totals row."""
     line = "-" * 96
     print("\n" + line)
     print(f"{'Symbol':<8}{'Shares':>9}{'Buy $':>11}{'Now $':>11}"
           f"{'Invested $':>14}{'Value $':>14}{'Gain/Loss $':>14}{'%':>9}")
     print(line)
+
     for r in results:
         print(f"{r['Symbol']:<8}{r['Shares']:>9.2f}{r['Buy Price']:>11.2f}"
               f"{r['Current Price']:>11.2f}{r['Invested']:>14,.2f}"
               f"{r['Current Value']:>14,.2f}{r['Gain/Loss']:>+14,.2f}"
               f"{r['Gain/Loss %']:>+8.2f}%")
+
     inv, val, gl, pct = totals(results)
     print(line)
     print(f"{'TOTAL':<8}{'':>9}{'':>11}{'':>11}{inv:>14,.2f}{val:>14,.2f}"
@@ -145,31 +159,38 @@ def print_report(results):
 
 
 def save_summary(results, path=SUMMARY_FILE):
-    """Append this run to the CSV log (header written only for a new file)."""
+    """Add this run to the CSV log (header only written the first time)."""
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     new_file = not os.path.exists(path)
+
     with open(path, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDS)
         if new_file:
             writer.writeheader()
+
+        # One row per stock
         for r in results:
             row = {"Timestamp": stamp}
             row.update({k: (round(v, 2) if isinstance(v, float) else v) for k, v in r.items()})
             writer.writerow(row)
+
+        # Extra TOTAL row at the bottom
         inv, val, gl, pct = totals(results)
         writer.writerow({"Timestamp": stamp, "Symbol": "TOTAL", "Company": "Portfolio",
                          "Invested": round(inv, 2), "Current Value": round(val, 2),
                          "Gain/Loss": round(gl, 2), "Gain/Loss %": round(pct, 2)})
+
     print(f"\nSummary logged to {os.path.basename(path)}")
 
 
 def main():
     print("=== STOCK PORTFOLIO PERFORMANCE TRACKER ===\n")
-    companies = load_sp500()
-    portfolio = collect_positions(companies)
-    results = evaluate(portfolio, companies)
-    print_report(results)
-    save_summary(results)
+
+    companies = load_sp500()              # load company names (optional)
+    portfolio = collect_positions(companies)   # ask for the user's stocks
+    results = evaluate(portfolio, companies)   # calculate values
+    print_report(results)                 # show the table
+    save_summary(results)                 # save to CSV
 
 
 if __name__ == "__main__":
