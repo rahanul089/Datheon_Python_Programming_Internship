@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+.DS_Store
+Thumbs.db
+# Task 2 output — regenerate locally, don't commit
+Task2_Portfolio_Tracker/portfolio_summary.csv
+# Task 3 runtime artifacts
+*.log
